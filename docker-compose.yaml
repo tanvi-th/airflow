@@ -36,8 +36,11 @@ x-airflow-common:
     AIRFLOW__CORE__REMOTE_LOGGING: 'False'
     PYTHONPATH: /opt/airflow/data-pipelines
     AIRFLOW_HOME: /opt/airflow
-    JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
-    PATH: /usr/lib/jvm/java-17-openjdk-arm64/bin:/home/airflow/.local/bin:/opt/airflow/venv/bin:/opt/spark/bin:$PATH
+    JAVA_HOME: /usr/lib/jvm/java-17-openjdk-arm64
+    PATH: /usr/lib/jvm/java-17-openjdk-arm64/bin:/home/airflow/.local/bin:/opt/airflow/venv/bin:/opt/spark/bin:/opt/spark/jars:$PATH
+    # AWS_PROFILE: local_dev
+    # AWS_SHARED_CREDENTIALS_FILE: /root/.aws/credentials
+    # AWS_CONFIG_FILE: /root/.aws/config
 
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
@@ -85,8 +88,7 @@ services:
 
   airflow-webserver:
     <<: *airflow-common
-    # image: my-airflow:latest
-    user: "${AIRFLOW_UID:-50000}:0" #"501:0"
+    user: "${AIRFLOW_UID:-50000}:0"
     command: webserver
     ports:
       - "8080:8080"
@@ -95,9 +97,6 @@ services:
       AIRFLOW__LOGGING__WORKER_LOG_SERVER_PORT: 8793
       AIRFLOW__LOGGING__BASE_LOG_FOLDER: /opt/airflow/logs
       AIRFLOW__CORE__HOSTNAME_CALLABLE: "socket.getfqdn"
-      AWS_PROFILE: local_dev
-      AWS_SHARED_CREDENTIALS_FILE: /opt/airflow/.aws/credentials
-      # AIRFLOW_HOME: /opt/airflow
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 30s
@@ -115,22 +114,20 @@ services:
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
       - /var/run/docker.sock:/var/run/docker.sock
-      - ~/.aws:/opt/airflow/.aws:ro
+      - ./spark-logs:/opt/spark/logs
+      - ./spark-jars:/opt/spark/jars
+      - ~/.aws:/root/.aws:rw
 
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
     image: my-airflow:latest
-    user: "${AIRFLOW_UID:-50000}:0" #"501:0"
+    user: "${AIRFLOW_UID:-50000}:0"
     environment:
       <<: *airflow-common-env
       AIRFLOW__LOGGING__WORKER_LOG_SERVER_PORT: 8793
       AIRFLOW__LOGGING__BASE_LOG_FOLDER: /opt/airflow/logs
       AIRFLOW__CORE__HOSTNAME_CALLABLE: "socket.getfqdn"
-      AWS_PROFILE: local_dev
-      AWS_SHARED_CREDENTIALS_FILE: /opt/airflow/.aws/credentials
-      AIRFLOW_CONN_SPARK_DEFAULT: spark://local[*]
-      # AIRFLOW_HOME: /opt/airflow
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
       interval: 30s
@@ -142,25 +139,24 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-      # spark-master:
     volumes:
       - ./dags:/opt/airflow/dags
       - /Users/tanvithanki/Documents/git_repos/data_eng/data-pipelines:/opt/airflow/data-pipelines
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
       - /var/run/docker.sock:/var/run/docker.sock
-      - ~/.aws:/opt/airflow/.aws:ro
+      - ./spark-logs:/opt/spark/logs
+      - ./spark-jars:/opt/spark/jars
+      - ~/.aws:/root/.aws:rw
 
   airflow-worker:
     <<: *airflow-common
     command: celery worker
     image: my-airflow:latest
-    user: "${AIRFLOW_UID:-50000}:0" #"501:0"
-    # build: .
+    user: "${AIRFLOW_UID:-50000}:0"
     ports:
       - "8793:8793"
     healthcheck:
-      # yamllint disable rule:line-length
       test:
         - "CMD-SHELL"
         - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}" || celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
@@ -176,10 +172,6 @@ services:
       AIRFLOW__LOGGING__WORKER_LOG_SERVER_PORT: 8793
       AIRFLOW__LOGGING__BASE_LOG_FOLDER: /opt/airflow/logs
       AIRFLOW__CORE__HOSTNAME_CALLABLE: "socket.getfqdn"
-      AWS_PROFILE: local_dev
-      AWS_SHARED_CREDENTIALS_FILE: /opt/airflow/.aws/credentials
-      AIRFLOW_CONN_SPARK_DEFAULT: spark://local[*]
-      # AIRFLOW_HOME: /opt/airflow
     restart: always
     depends_on:
       <<: *airflow-common-depends-on
@@ -191,21 +183,19 @@ services:
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
       - /var/run/docker.sock:/var/run/docker.sock
-      - ~/.aws:/opt/airflow/.aws:ro
+      - ./spark-logs:/opt/spark/logs
+      - ./spark-jars:/opt/spark/jars
+      - ~/.aws:/root/.aws:rw
 
   airflow-triggerer:
     <<: *airflow-common
     command: triggerer
     image: my-airflow:latest
-    # build: .
     environment:
       <<: *airflow-common-env
       AIRFLOW__LOGGING__WORKER_LOG_SERVER_PORT: 8793
       AIRFLOW__LOGGING__BASE_LOG_FOLDER: /opt/airflow/logs
       AIRFLOW__CORE__HOSTNAME_CALLABLE: "socket.getfqdn"
-      AWS_PROFILE: local_dev
-      AWS_SHARED_CREDENTIALS_FILE: /opt/airflow/.aws/credentials
-      # AIRFLOW_HOME: /opt/airflow
     healthcheck:
       test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
       interval: 30s
@@ -223,14 +213,15 @@ services:
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
       - /var/run/docker.sock:/var/run/docker.sock
-      - ~/.aws:/opt/airflow/.aws:ro
+      - ./spark-logs:/opt/spark/logs
+      - ./spark-jars:/opt/spark/jars
+      - ~/.aws:/root/.aws:rw
 
   airflow-init:
     <<: *airflow-common
     image: my-airflow:latest
     depends_on:
       - airflow-postgres
-    # entrypoint: ["/bin/bash", "-c"]
     user: "0:0"
     command: >
       bash -c "mkdir -p /opt/airflow/dags /opt/airflow/logs /opt/airflow/plugins &&
@@ -284,38 +275,10 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
-  # spark-master:
-  #   image: bitnami/spark:latest
-  #   environment:
-  #     - SPARK_MODE=master
-  #   ports:
-  #     - "8082:8082"
-  #     - "7077:7077"
-  #   # volumes:
-  #   #   - spark-data:/bitnami
-  #   #   - ./apps:/opt/spark-apps
-  #   #   - ./data:/opt/spark-data
-  #   # networks:
-  #   #   - data-platform
-
-  # spark-worker:
-  #   image: bitnami/spark:latest
-  #   environment:
-  #     - SPARK_MODE=worker
-  #     - SPARK_MASTER_URL=spark://spark-master:7077
-  #   # volumes:
-  #   #   - spark-data:/bitnami
-  #   #   - ./apps:/opt/spark-apps
-  #   #   - ./data:/opt/spark-data
-  #   depends_on:
-  #     - spark-master
-  #   # networks:
-  #   #   - data-platform
-
 volumes:
   postgres-db-volume:
   logs-volume:
-  # spark-data:
+  spark-data:
 
 networks:
   default:

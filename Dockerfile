@@ -6,8 +6,11 @@ ENV CONSTRAINT_URL="https://raw.githubusercontent.com/apache/airflow/constraints
 
 USER root
 COPY data-pipelines /opt/data-pipelines
-COPY airflow/spark-3.5.6-bin-hadoop3.tgz /tmp/
+COPY airflow/spark-jars/spark-3.5.6-bin-hadoop3.tgz /tmp/
+# COPY airflow/docker-aws /opt/airflow/.aws
 
+# RUN chown -R airflow:root /opt/airflow/.aws \
+#     && chmod -R 644 /opt/airflow/.aws
 # install system deps
 RUN mkdir -p /opt/airflow /opt/airflow/logs /opt/airflow/dags /opt/airflow/plugins && \
     chown -R airflow:0 /opt/airflow
@@ -31,12 +34,15 @@ USER airflow
 
 # Environment variables
 ENV SPARK_HOME=/opt/spark \
-    JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
+    JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64 \
     PATH="/usr/lib/jvm/java-17-openjdk-arm64/bin:/home/airflow/.local/bin:/opt/airflow/venv/bin:/opt/spark/bin:$PATH" \
     AIRFLOW_HOME=/opt/airflow
 
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir --constraint "${CONSTRAINT_URL}" apache-airflow-providers-apache-spark
+
+# Ensure Spark's Ivy cache exists and is writable
+RUN mkdir -p /home/airflow/.ivy2 && chmod -R 777 /home/airflow/.ivy2
 
 WORKDIR /opt/data-pipelines
 RUN pip install --no-cache-dir build && python -m build --wheel -o /opt/dist

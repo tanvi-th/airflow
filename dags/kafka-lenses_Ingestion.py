@@ -13,6 +13,19 @@ with DAG(
         application = "/opt/airflow/data-pipelines/data_pipelines/etl_ingestion.py",
         conn_id="spark_default", 
         name="kafka_backblaze_smart_job",
+        application_args=[
+            "--source_bucket", "kafka-lenses-raw",
+            "--target_bucket", "dwh-bronze",
+            "--input_format", "json",
+            "--target_prefix", "bronze/kafka-lenses",
+            "--source_prefix", "backblaze_smart",
+            "--dwh_storage_mode", "overwrite",
+            "--multiline", "true",
+            "--_corrupt_record", "true",
+            "--manifest_bucket", "dwh-manifests",
+            "--manifest_key", "bronze/kafka-lenses/backblaze_smart.json",
+            "--schema", "/opt/airflow/data-pipelines/data_pipelines/schemas/kafka_lenses_backblaze_smart.py"
+            ],
         conf={
                 "spark.driver.extraJavaOptions": "-Dlog4j.rootCategory=INFO,console",
                 "spark.executor.extraJavaOptions": "-Dlog4j.rootCategory=INFO,console",

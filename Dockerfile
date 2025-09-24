@@ -7,10 +7,7 @@ ENV CONSTRAINT_URL="https://raw.githubusercontent.com/apache/airflow/constraints
 USER root
 COPY data-pipelines /opt/data-pipelines
 COPY airflow/spark-jars/spark-3.5.6-bin-hadoop3.tgz /tmp/
-# COPY airflow/docker-aws /opt/airflow/.aws
 
-# RUN chown -R airflow:root /opt/airflow/.aws \
-#     && chmod -R 644 /opt/airflow/.aws
 # install system deps
 RUN mkdir -p /opt/airflow /opt/airflow/logs /opt/airflow/dags /opt/airflow/plugins && \
     chown -R airflow:0 /opt/airflow
@@ -39,6 +36,9 @@ ENV SPARK_HOME=/opt/spark \
     AIRFLOW_HOME=/opt/airflow
 
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    # Install Avro and Confluent Kafka
+    pip install --no-cache-dir confluent-kafka[avro] orjson fastavro requests avro-python3 && \
+    pip install --no-cache-dir lz4 && \
     pip install --no-cache-dir --constraint "${CONSTRAINT_URL}" apache-airflow-providers-apache-spark
 
 # Ensure Spark's Ivy cache exists and is writable
